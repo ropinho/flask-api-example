@@ -45,7 +45,8 @@ def parse_userinfo_data(userinfo_data):
             'first_name': userinfo_data['names'][0]['givenName'],
             'last_name': userinfo_data['names'][0]['familyName'],
             'primary_email': primary_email['value'],
-            'email_addresses': email_addresses
+            'email_addresses': email_addresses,
+            'photo_url': userinfo_data['photos'][0]['url']
         }
     }
 
@@ -56,7 +57,12 @@ def parse_connections_data(connections_data):
     connections_list = []
     for con in connections_data['connections']:
         email_ = con['emailAddresses'][0]['value'] if 'emailAddresses' in con else ''
-        email_domain_ = get_email_domain(email_) if len(email_) > 0 else ''
+        email_domain_ = ''
+        try:
+            email_domain_ = get_email_domain(email_) if len(email_) > 0 else ''
+        except ValueError:
+            pass
+
         connections_list.append({
             'name': con['names'][0]['displayName'],
             'email': email_,
@@ -74,8 +80,14 @@ def parse_connections_data(connections_data):
 @app.route("/")
 def index():
     if 'credentials' not in flask.session:
-        return flask.jsonify(
-                {'message': 'No Google account logged. Try to request /login'})
+        return flask.jsonify({
+            'message': 'No Google account logged. Try to request /login',
+            'logged': False
+        })
+    # verifica o query param que define se devem ser retornados somente as
+    # informações de contatos que possuem emails
+    only_emails = flask.request.args.get('only_emails', default=False, type=bool)
+
     # Pega as credenciais da sessão do usuário logado e inicia a integração com
     # o serviço da Google People API
     credentials = Credentials(**flask.session['credentials'])
@@ -83,8 +95,9 @@ def index():
 
     # Obter o nome e email da conta do Google do usuario logado
     profile = people_service.people().get(
-            resourceName='people/me', personFields='names,emailAddresses'
+            resourceName='people/me', personFields='names,emailAddresses,photos'
     ).execute()
+    #print(profile)
 
     # Obter a lista de conexões/contatos
     connections = people_service.people().connections().list(
@@ -94,7 +107,13 @@ def index():
     userinfo = parse_userinfo_data(profile)
     connections = parse_connections_data(connections)
 
-    return flask.jsonify({**userinfo, **connections})
+    if only_emails:
+        connections['connections'] = list(filter(
+                lambda con: len(con['email']) > 0, connections['connections']))
+        connections['total_items'] = len(connections['connections'])
+        connections['total_people'] = len(connections['connections'])
+
+    return flask.jsonify({'logged': True, **userinfo, **connections})
 
 
 # Inicia o fluxo de login usando a biblioteca de cliente oAuth2 do Google
