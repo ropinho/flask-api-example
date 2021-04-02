@@ -1,0 +1,16 @@
+# Geral
+**/*.conf
+*/build/
+dist/
+test/
+test-*
+
+# Arquivos do projeto da API Flask
+**/__pycache__
+**/credentials.json
+**/*.so
+
+# Front-end Vue e Node
+webclient/doc/_book
+**/node_modules
+
