@@ -7,11 +7,6 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 # Configurações
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", None)
-GOOGLE_DISCOVERY_URL = (
-    "https://accounts.google.com/.well-known/openid-configuration"
-)
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -19,24 +14,68 @@ SCOPES = [
     "https://www.googleapis.com/auth/contacts"
 ]
 
+SECRETS_FILE = 'credentials.json'
+
+if not os.path.exists(SECRETS_FILE):
+    print(f'Error: Secrets file "{SECRETS_FILE}" not exists!')
+    exit(1)
+
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
-# Endpoints
-# Homepage:       /
-# Login:          /login
-# Login Callback: /login/callback
-# Logout:         /logout
+# Dado um endereço de e-mail, retorna o domínio do endereço
+# >>> get_email_domain('meuemail@gmail.com')
+# 'gmail.com'
+def get_email_domain(email):
+    if '@' in email:
+        return email.split('@')[1]
+    else: raise ValueError('Impossible to get domain name from email') 
 
-#
-#
+# Pega um dicionário com o formato padrão retornado pela API do Google e
+# converte para um formato que será retornado para o cliente da API Flask
+def parse_userinfo_data(userinfo_data):
+    email_addresses = userinfo_data['emailAddresses']
+    primary_email = list(filter(
+            lambda email: email['metadata']['primary'],
+            email_addresses))[0]
+    email_addresses = [email['value'] for email in email_addresses]
+
+    return {'userinfo': {
+            'display_name': userinfo_data['names'][0]['displayName'],
+            'first_name': userinfo_data['names'][0]['givenName'],
+            'last_name': userinfo_data['names'][0]['familyName'],
+            'primary_email': primary_email['value'],
+            'email_addresses': email_addresses
+        }
+    }
+
+# Converte um dicionário de informações de contatos com o formato padrão
+# retornado pela API do Google para um formato que será retornado para o cliente
+# da API Flask
+def parse_connections_data(connections_data):
+    connections_list = []
+    for con in connections_data['connections']:
+        email_ = con['emailAddresses'][0]['value'] if 'emailAddresses' in con else ''
+        email_domain_ = get_email_domain(email_) if len(email_) > 0 else ''
+        connections_list.append({
+            'name': con['names'][0]['displayName'],
+            'email': email_,
+            'email_domain': email_domain_
+        })
+    return {
+        'connections': connections_list,
+        'total_items': connections_data['totalItems'],
+        'total_people': connections_data['totalPeople']
+    }
+
+
+# Caso tenha uma conta Google logada no app, retorna dados do perfil e contatos.
+# Caso não haja login, retorna uma mensagem sugerindo acessar a rota /login
 @app.route("/")
 def index():
-    # Se não há credenciais de sessão, o usuário recebe um link para o
-    # endpoint de login
     if 'credentials' not in flask.session:
-        return '<a class="button" href="/login">Google Login</a>'
-    
+        return flask.jsonify(
+                {'message': 'No Google account logged. Try to request /login'})
     # Pega as credenciais da sessão do usuário logado e inicia a integração com
     # o serviço da Google People API
     credentials = Credentials(**flask.session['credentials'])
@@ -52,14 +91,17 @@ def index():
             resourceName='people/me', personFields='names,emailAddresses'
     ).execute()
 
-    return flask.jsonify({'userinfo': profile, **connections})
+    userinfo = parse_userinfo_data(profile)
+    connections = parse_connections_data(connections)
+
+    return flask.jsonify({**userinfo, **connections})
 
 
 # Inicia o fluxo de login usando a biblioteca de cliente oAuth2 do Google
 @app.route("/login")
 def login():
     # Usa as credenciais do arquivo local 'credentials.json'
-    flow = Flow.from_client_secrets_file('credentials.json', scopes=SCOPES)
+    flow = Flow.from_client_secrets_file(SECRETS_FILE, scopes=SCOPES)
     flow.redirect_uri = flask.request.base_url + "/callback"
 
     authorization_url, state = flow.authorization_url(
@@ -77,7 +119,7 @@ def login():
 def callback():
     state = flask.session['state']
     flow = Flow.from_client_secrets_file(
-            'credentials.json', scopes=SCOPES, state=state)
+            SECRETS_FILE, scopes=SCOPES, state=state)
     flow.redirect_uri = flask.url_for('callback', _external=True)
     
     authorization_response = flask.request.url
