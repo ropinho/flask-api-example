@@ -6,6 +6,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
+from controllers import Connections
+from conversors import parse_userinfo_data, parse_connections_data
+
 # Configurações
 SCOPES = [
     "openid",
@@ -15,7 +18,6 @@ SCOPES = [
 ]
 
 SECRETS_FILE = 'credentials.json'
-
 if not os.path.exists(SECRETS_FILE):
     print(f'Error: Secrets file "{SECRETS_FILE}" not exists!')
     exit(1)
@@ -23,73 +25,21 @@ if not os.path.exists(SECRETS_FILE):
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
-# Dado um endereço de e-mail, retorna o domínio do endereço
-# >>> get_email_domain('meuemail@gmail.com')
-# 'gmail.com'
-def get_email_domain(email):
-    if '@' in email:
-        return email.split('@')[1]
-    else: raise ValueError('Impossible to get domain name from email') 
+DEFAULT_UNLOGGED_RESPONSE = {
+    'logged': False,
+    'message': 'No Google account logged. Try to request /login'
+}
 
-# Pega um dicionário com o formato padrão retornado pela API do Google e
-# converte para um formato que será retornado para o cliente da API Flask
-def parse_userinfo_data(userinfo_data):
-    email_addresses = userinfo_data['emailAddresses']
-    primary_email = list(filter(
-            lambda email: email['metadata']['primary'],
-            email_addresses))[0]
-    email_addresses = [email['value'] for email in email_addresses]
-
-    return {'userinfo': {
-            'display_name': userinfo_data['names'][0]['displayName'],
-            'first_name': userinfo_data['names'][0]['givenName'],
-            'last_name': userinfo_data['names'][0]['familyName'],
-            'primary_email': primary_email['value'],
-            'email_addresses': email_addresses,
-            'photo_url': userinfo_data['photos'][0]['url']
-        }
-    }
-
-# Converte um dicionário de informações de contatos com o formato padrão
-# retornado pela API do Google para um formato que será retornado para o cliente
-# da API Flask
-def parse_connections_data(connections_data):
-    connections_list = []
-    for con in connections_data['connections']:
-        email_ = con['emailAddresses'][0]['value'] if 'emailAddresses' in con else ''
-        email_domain_ = ''
-        try:
-            email_domain_ = get_email_domain(email_) if len(email_) > 0 else ''
-        except ValueError:
-            pass
-
-        connections_list.append({
-            'name': con['names'][0]['displayName'],
-            'email': email_,
-            'email_domain': email_domain_
-        })
-    return {
-        'connections': connections_list,
-        'total_items': connections_data['totalItems'],
-        'total_people': connections_data['totalPeople']
-    }
-
-
-# Caso tenha uma conta Google logada no app, retorna dados do perfil e contatos.
-# Caso não haja login, retorna uma mensagem sugerindo acessar a rota /login
-@app.route("/")
-def index():
+# Caso tenha uma conta do Google logada no app, retorna os dados do próprio
+# usuário logado. Caso contrário, retorna a mensagem padrão para requisições
+# não autenticadas com a conta do Google.
+@app.route("/me")
+def userinfo():
     if 'credentials' not in flask.session:
-        return flask.jsonify({
-            'message': 'No Google account logged. Try to request /login',
-            'logged': False
-        })
-    # verifica o query param que define se devem ser retornados somente as
-    # informações de contatos que possuem emails
-    only_emails = flask.request.args.get('only_emails', default=False, type=bool)
+        return flask.jsonify(DEFAULT_UNLOGGED_RESPONSE)
 
-    # Pega as credenciais da sessão do usuário logado e inicia a integração com
-    # o serviço da Google People API
+    # Instancia o objeto de credenciais do app e inicia a integração com o
+    # serviço da Google People API
     credentials = Credentials(**flask.session['credentials'])
     people_service = build('people', 'v1', credentials=credentials)
 
@@ -97,23 +47,32 @@ def index():
     profile = people_service.people().get(
             resourceName='people/me', personFields='names,emailAddresses,photos'
     ).execute()
-    #print(profile)
-
-    # Obter a lista de conexões/contatos
-    connections = people_service.people().connections().list(
-            resourceName='people/me', personFields='names,emailAddresses'
-    ).execute()
-
     userinfo = parse_userinfo_data(profile)
-    connections = parse_connections_data(connections)
 
-    if only_emails:
+    return flask.jsonify({'logged': True, **userinfo})
+
+
+# Caso tenha uma conta Google logada no app, retorna dados de contatos. Aceita
+# um parâmetro que define se serão retornados todos os usuários ou somente os
+# que possuem ao menos um endereço de email.
+# Caso não haja login, retorna uma mensagem sugerindo acessar a rota /login.
+@app.route("/connections")
+def connections():
+    if 'credentials' not in flask.session:
+        return flask.jsonify(DEFAULT_UNLOGGED_RESPONSE)
+
+    all_contacts = flask.request.args.get('all', default=False, type=bool)
+
+    credentials = Credentials(**flask.session['credentials'])
+    connections = Connections.list_contacts(credentials)
+
+    if not all_contacts:
         connections['connections'] = list(filter(
                 lambda con: len(con['email']) > 0, connections['connections']))
         connections['total_items'] = len(connections['connections'])
         connections['total_people'] = len(connections['connections'])
 
-    return flask.jsonify({'logged': True, **userinfo, **connections})
+    return flask.jsonify({'logged': True, **connections})
 
 
 # Inicia o fluxo de login usando a biblioteca de cliente oAuth2 do Google
@@ -149,14 +108,14 @@ def callback():
     flask.session['credentials'] = credentials_to_dict(credentials)
 
     # Redireciona o usuario para a homepage
-    return flask.redirect(flask.url_for("index"))
+    return flask.redirect(flask.url_for('userinfo'))
 
 
 @app.route("/logout")
 def logout():
     if 'credentials' in flask.session:
         flask.session.pop('credentials', None)
-    return flask.redirect(flask.url_for('index'))
+    return flask.redirect(flask.url_for('userinfo'))
 
 
 # Converte um objeto de credenciais para uma representação de dicionário
