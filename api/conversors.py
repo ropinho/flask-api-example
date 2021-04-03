@@ -1,3 +1,16 @@
+'''Conversors
+
+Define métodos para conversões de formatos de dados
+'''
+
+# Converte um objeto de credenciais para uma representação de dicionário
+def credentials_to_dict(credentials):
+    return {'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes}
 
 # Dado um endereço de e-mail, retorna o domínio do endereço
 # >>> get_email_domain('meuemail@gmail.com')

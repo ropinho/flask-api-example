@@ -18,35 +18,43 @@ fazer o login do usuário no app usando a conta do Google e então fornecer as
 informações básicas do usuário e informações de contatos desse usuário.
 
 As informações incluem principalmente nome e endereços de email e são fornecidas
-em formato JSON. A API consiste de 4 endpoints:
+em formato JSON. A API é composta de 5 endpoints:
 
-- ```GET /```
+- ```GET /me```
 
-  O endpoint inicial (index), ele verifica se app recebeu o login de alguma
-  conta do Google, se sim, envia os dados do perfil e de contatos desse
-  respectivo usuário logado. Caso não a requisição não venha de um usuário
-  logado, ele envia somente uma mensagem com esse aviso.
+  Retorna as informações básicas do perfil do usuário logado com a conta do
+  Google. Caso não seja detectado um login, é retornada somente uma mensagem com
+  esse aviso.
+
+- ```GET /connections```
+
+  Retorna as informações de conexões/contatos do atual usuário logado com a
+  conta do Google, as infomações incluem os nomes, endereços de email e seus
+  respectivos domínios. Aceita "all" como um parâmetro de Url com um valor
+  booleano que define se serão retornados todos os contatos ou somente aqueles
+  que possuem um endereço de e-mail, o valor padrão é "false". Caso não seja
+  detectado um login é retornada somente a mensagem padrão de aviso.
 
 - ```GET /login```
 
   Aqui, o sistema faz a requisição que inicia o fluxo de autenticação com uma
   conta do Google. O usuário é requisitado a logar com uma conta Google ou
-  escolher entre uma conta já logada no navegador. Depois de o usuário consentir
-  o login, o app redireciona para `/login/callback` para tratar a resposta da
-  API OAuth2 do Google.
+  escolher uma conta já logada no navegador. Depois de o usuário consentir o
+  login, o app redireciona para `/login/callback` para tratar a resposta da API
+  OAuth2 do Google.
 
 - ```GET /login/callback```
 
-  Esse endpoint trata as respostas do servidor de OAuth2 do Google com as 
-  credenciais de autenticação que são armazenadas em uma sessão de usuário no
-  app Flask. Depois que as credenciais/tokens são validados e armazenados na
-  sessão, o app redireciona de volta para `/login`, para fornecer os dados desse
-  usuário logado.
+  Trata as respostas do servidor de OAuth2 do Google com as credenciais de
+  autenticação que são armazenadas em uma sessão de usuário no app Flask. Depois
+  que as credenciais/tokens são validadas e armazenadas na sessão, o app
+  redireciona para `/me`, para fornecer os dados desse usuário logado.
 
 - ```GET /logout```
 
   Limpa a sessão de usuário (com as credenciais) se for detectado que há um
-  login no app  e redireciona de volta para `/login`.
+  login no app e redireciona para `/me`. Caso contrário somente retorna a
+  mensagem padrão de usuário não logado.
 
 ## Front-end
 

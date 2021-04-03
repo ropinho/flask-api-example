@@ -7,7 +7,11 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from controllers import Connections
-from conversors import parse_userinfo_data, parse_connections_data
+from conversors import (
+    parse_userinfo_data,
+    parse_connections_data,
+    credentials_to_dict
+)
 
 # Configurações
 SCOPES = [
@@ -22,13 +26,14 @@ if not os.path.exists(SECRETS_FILE):
     print(f'Error: Secrets file "{SECRETS_FILE}" not exists!')
     exit(1)
 
-app = flask.Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
-
 DEFAULT_UNLOGGED_RESPONSE = {
     'logged': False,
     'message': 'No Google account logged. Try to request /login'
 }
+
+app = flask.Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
+
 
 # Caso tenha uma conta do Google logada no app, retorna os dados do próprio
 # usuário logado. Caso contrário, retorna a mensagem padrão para requisições
@@ -64,13 +69,7 @@ def connections():
     all_contacts = flask.request.args.get('all', default=False, type=bool)
 
     credentials = Credentials(**flask.session['credentials'])
-    connections = Connections.list_contacts(credentials)
-
-    if not all_contacts:
-        connections['connections'] = list(filter(
-                lambda con: len(con['email']) > 0, connections['connections']))
-        connections['total_items'] = len(connections['connections'])
-        connections['total_people'] = len(connections['connections'])
+    connections = Connections.list_contacts_by_domain(credentials)
 
     return flask.jsonify({'logged': True, **connections})
 
@@ -116,16 +115,6 @@ def logout():
     if 'credentials' in flask.session:
         flask.session.pop('credentials', None)
     return flask.redirect(flask.url_for('userinfo'))
-
-
-# Converte um objeto de credenciais para uma representação de dicionário
-def credentials_to_dict(credentials):
-    return {'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes}
 
 
 if __name__ == "__main__":
