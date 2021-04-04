@@ -1,6 +1,7 @@
 import os
-import flask
 import requests
+import flask
+from flask_cors import CORS
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -33,7 +34,7 @@ DEFAULT_UNLOGGED_RESPONSE = {
 
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
-
+CORS(app)
 
 # Caso tenha uma conta do Google logada no app, retorna os dados do próprio
 # usuário logado. Caso contrário, retorna a mensagem padrão para requisições
@@ -118,5 +119,5 @@ def logout():
 
 
 if __name__ == "__main__":
-    app.run('localhost', 5000, debug=True)
+    app.run('127.0.0.1', port=5000, debug=True)
 
