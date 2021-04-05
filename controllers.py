@@ -3,7 +3,20 @@ from flask import session
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from conversors import parse_connections_data
+from conversors import parse_connections_data, parse_userinfo_data
+
+# Busca pelas infoma de perfil do usuário
+class Profile:
+    @staticmethod
+    def get_userinfo(credentials: Credentials):
+        people_service = build('people', 'v1', credentials=credentials)
+        # Obter o nome e email da conta do Google do usuario logado
+        profile = people_service.people().get(
+            resourceName='people/me', personFields='names,emailAddresses,photos'
+        ).execute()
+        userinfo = parse_userinfo_data(profile)
+        return userinfo
+        
 
 # Trata requisições relacionadas a obter os contatos através da People API
 class Connections:

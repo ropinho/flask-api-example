@@ -1,8 +1,7 @@
 Flask==1.1.2
-gunicorn==19.3.0
+gunicorn==19.5.0
 flask-cors
-requests
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
-
+pyopenssl
