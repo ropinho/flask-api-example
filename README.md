@@ -3,13 +3,6 @@
 Basicamente o sistema permite o usuário logar com uma conta do Google e então
 lista e agrupa os contatos do usuário por domínio. Por exemplo:
 
-| Domínio             | E-mail
-|---------------------|---------------
-| conectanuvem.com.br | ti@conectanuvem.com.br
-|                     | talentos@conectanuvem.com.br
-| gmail.com           | meuemailpessoal@gmail.com
-|                     | outroemail@gmail.com
-
 ## Flask REST API
 
 Foi usado Python com o framework Flask para implementação de uma API REST que
@@ -35,21 +28,20 @@ em formato JSON. A API é composta de 4 endpoints:
   Aqui, o sistema faz a requisição que inicia o fluxo de autenticação com uma
   conta do Google. O usuário é requisitado a logar com uma conta Google ou
   escolher uma conta já logada no navegador. Depois de o usuário consentir o
-  login, o app redireciona para `/login/callback` para tratar a resposta da API
+  login é redirecionado para `/login/callback` para tratar a resposta da API
   OAuth2 do Google.
 
 - ```GET /login/callback```
 
   Trata as respostas do servidor de OAuth2 do Google com as credenciais de
   autenticação que são armazenadas em uma sessão de usuário no app Flask. Depois
-  que as credenciais/tokens são validadas e armazenadas na sessão, o app
-  redireciona para `/connections`, para fornecer os dados desse usuário logado.
+  que as credenciais/tokens são validadas e armazenadas na sessão, o app retorna
+  um JSON com a resposta sobre o sucesso do login.
 
 - ```GET /logout```
 
   Limpa a sessão de usuário (com as credenciais) se for detectado que há um
-  login no app e redireciona para `/connections`. Caso contrário somente retorna
-  a mensagem padrão de usuário não logado.
+  login no app. Retorna um JSON com uma mensagem sobre o processo de logout.
 
 ---
 
